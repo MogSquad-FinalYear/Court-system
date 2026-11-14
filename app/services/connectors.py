@@ -268,6 +268,7 @@ def invoke(
     operation: str,
     payload: dict,
     caller: str,
+    owner_user_id: str | None = None,
     idempotency_key: str | None = None,
     _fail_injection: bool = False,
 ) -> dict:
@@ -282,7 +283,9 @@ def invoke(
 
     key = idempotency_key or str(uuid.uuid4())
     prior = query_one(
-        "SELECT * FROM connector_calls WHERE idempotency_key = ?", (key,))
+        "SELECT * FROM connector_calls WHERE idempotency_key = ? "
+        "AND owner_user_id = ?",
+        (key, owner_user_id))
     if prior and prior["status"] == "ok":
         return {
             "connector_id": connector_id, "operation": operation,
@@ -310,12 +313,12 @@ def invoke(
                     """INSERT OR REPLACE INTO connector_calls
                        (idempotency_key, connector_id, operation, request_json,
                         response_json, status, attempts, called_at, called_by,
-                        duration_ms)
-                       VALUES (?, ?, ?, ?, ?, 'ok', ?, ?, ?, ?)""",
+                        duration_ms, owner_user_id)
+                       VALUES (?, ?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?)""",
                     (key, connector_id, operation,
                      json.dumps(_redact(connector_id, payload)),
                      json.dumps(result), attempts, _now().isoformat(), caller,
-                     duration))
+                     duration, owner_user_id))
             _record_result(connector_id, ok=True)
             return {
                 "connector_id": connector_id, "operation": operation,
@@ -335,11 +338,12 @@ def invoke(
         cur.execute(
             """INSERT OR REPLACE INTO connector_calls
                (idempotency_key, connector_id, operation, request_json,
-                response_json, status, attempts, called_at, called_by, duration_ms)
-               VALUES (?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?)""",
+                response_json, status, attempts, called_at, called_by, duration_ms,
+                owner_user_id)
+               VALUES (?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?)""",
             (key, connector_id, operation,
              json.dumps(_redact(connector_id, payload)),
              json.dumps({"error": str(last_error)}), attempts,
-             _now().isoformat(), caller, duration))
+             _now().isoformat(), caller, duration, owner_user_id))
     _record_result(connector_id, ok=False)
     raise ConnectorError(str(last_error), retryable=False)

@@ -1,16 +1,3 @@
-"""Court case management system -- API entrypoint.
-
-All four features are built. Document Management is backed by Landing AI
-Agentic Document Extraction. The Integration Hub's five connectors are
-mocks: the calling framework around them (idempotency, retry, circuit
-breaker, redaction, call log) is real, the upstreams are not.
-
-A browser UI for exercising all four features is served at /ui.
-
-Run:
-    uvicorn app.main:app --reload --port 8020      (from the project root)
-    python -m app.main                             (binds HOST/PORT from config)
-"""
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -20,18 +7,12 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import CORS_ORIGINS, HOST, PORT
 from app.db import init_db
-from app.routers import documents, filing, integrations, scheduling
+from app.routers import auth, documents, filing, integrations, scheduling
 from app.services import extraction
 
 app = FastAPI(
     title="Court Case Management System",
     version="0.1.0",
-    description=(
-        "All four features are implemented. Document Management is backed by "
-        "Landing AI Agentic Document Extraction. The Integration Hub's five "
-        "connectors are MOCKS -- the calling framework (idempotency, retry, "
-        "circuit breaker, redaction, call log) is real, the upstreams are not."
-    ),
 )
 
 app.add_middleware(
@@ -49,6 +30,16 @@ app.include_router(documents.router)
 app.include_router(filing.router)
 app.include_router(scheduling.router)
 app.include_router(integrations.router)
+app.include_router(auth.router)
+
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 @app.get("/ui", include_in_schema=False)
@@ -77,8 +68,6 @@ def health() -> dict:
             "scheduling": "implemented",
             "integration_hub": "implemented (mock adapters)",
         },
-        # Surfaced because upload silently degrades to store-without-text
-        # when this is false; an operator should be able to see that.
         "document_extraction_configured": extraction.is_configured(),
     }
 

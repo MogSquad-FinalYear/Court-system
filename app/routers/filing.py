@@ -38,7 +38,7 @@ def _parse_date(value: str | None, field: str) -> date | None:
 
 
 @router.get("/case-types")
-def case_types() -> dict:
+def case_types(principal: Principal = Depends(current_principal)) -> dict:
     """Accepted case types, with what each requires."""
     return {
         "case_types": [
@@ -111,7 +111,7 @@ def submit_filing(
     title = (body.get("title") or "").strip()
     parties = body.get("parties") or []
     documents = body.get("documents") or []
-    jurisdiction = body.get("jurisdiction") or principal.jurisdiction
+    jurisdiction = principal.jurisdiction
     coa = _parse_date(body.get("cause_of_action_date"), "cause_of_action_date")
     filing_date = _parse_date(body.get("filing_date"), "filing_date") or date.today()
 

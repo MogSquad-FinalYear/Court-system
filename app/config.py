@@ -17,8 +17,23 @@ BLOB_DIR.mkdir(parents=True, exist_ok=True)
 HOST = os.environ.get("HOST", "0.0.0.0")
 PORT = int(os.environ.get("PORT", "8020"))
 CORS_ORIGINS = [
-    o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()
+    o.strip() for o in os.environ.get(
+        "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+    ).split(",") if o.strip()
 ]
+if "*" in CORS_ORIGINS:
+    raise RuntimeError("CORS_ORIGINS must list explicit frontend origins when credentials are enabled")
+
+JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY", "")
+JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY", "")
+JWT_ISSUER = os.environ.get("JWT_ISSUER", "veritas-court")
+JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "veritas-court-api")
+JWT_ACCESS_TTL_MINUTES = int(os.environ.get("JWT_ACCESS_TTL_MINUTES", "10"))
+JWT_REFRESH_TTL_DAYS = int(os.environ.get("JWT_REFRESH_TTL_DAYS", "30"))
+AUTH_ALLOW_REGISTRATION = os.environ.get("AUTH_ALLOW_REGISTRATION", "false").lower() == "true"
+AUTH_REGISTRATION_JURISDICTION = os.environ.get("AUTH_REGISTRATION_JURISDICTION", "")
+AUTH_REFRESH_COOKIE = os.environ.get("AUTH_REFRESH_COOKIE", "veritas_refresh")
+AUTH_COOKIE_SECURE = os.environ.get("AUTH_COOKIE_SECURE", "true").lower() == "true"
 
 # --- Document Management -------------------------------------------------
 # Landing AI Agentic Document Extraction. The SDK reads this same variable

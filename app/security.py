@@ -1,15 +1,13 @@
-"""Role- and jurisdiction-scoped access control.
-
-The principal is read from request headers (X-User-Id / X-Role /
-X-Jurisdiction). That is the one deliberate stub in this module: a real
-deployment replaces `current_principal` with JWT/SSO verification and
-nothing else here changes, because every policy decision below works off
-the Principal object, not off the headers.
-"""
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+import jwt
+from fastapi import Depends, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.config import JWT_AUDIENCE, JWT_ISSUER, JWT_PUBLIC_KEY
+from app.db import query_one
 
 
 class Role(StrEnum):
@@ -23,27 +21,23 @@ class Role(StrEnum):
 
 
 class Classification(StrEnum):
-    PUBLIC = "public"          # published orders, cause lists
-    RESTRICTED = "restricted"  # ordinary case filings
-    SEALED = "sealed"          # in-camera, POCSO, sealed-cover material
+    PUBLIC = "public"
+    RESTRICTED = "restricted"
+    SEALED = "sealed"
 
 
-# Which classifications each role may read at all. Jurisdiction is checked
-# separately -- clearing this table is necessary but not sufficient.
-_READ_MATRIX: dict[Role, set[Classification]] = {
-    Role.JUDGE: {Classification.PUBLIC, Classification.RESTRICTED, Classification.SEALED},
-    Role.REGISTRAR: {Classification.PUBLIC, Classification.RESTRICTED, Classification.SEALED},
+_READ_MATRIX = {
+    Role.JUDGE: set(Classification),
+    Role.REGISTRAR: set(Classification),
     Role.CLERK: {Classification.PUBLIC, Classification.RESTRICTED},
     Role.ADVOCATE: {Classification.PUBLIC, Classification.RESTRICTED},
     Role.LITIGANT: {Classification.PUBLIC, Classification.RESTRICTED},
     Role.PRISON_OFFICER: {Classification.PUBLIC},
     Role.PUBLIC: {Classification.PUBLIC},
 }
-
 _CAN_UPLOAD = {Role.JUDGE, Role.REGISTRAR, Role.CLERK, Role.ADVOCATE, Role.LITIGANT}
 _CAN_SIGN = {Role.JUDGE, Role.REGISTRAR, Role.ADVOCATE}
 _CAN_SEAL = {Role.JUDGE, Role.REGISTRAR}
-# Roles whose reach is not limited to their own jurisdiction.
 _CROSS_JURISDICTION = {Role.REGISTRAR}
 
 
@@ -52,19 +46,19 @@ class Principal:
     user_id: str
     role: Role
     jurisdiction: str
+    permissions: tuple[str, ...] = ()
 
     def may_read(self, classification: str, jurisdiction: str) -> bool:
         try:
             cls = Classification(classification)
         except ValueError:
-            return False  # unknown classification: deny, don't guess
-        if cls not in _READ_MATRIX.get(self.role, set()):
             return False
-        if cls is Classification.PUBLIC:
-            return True  # published material is not jurisdiction-scoped
-        if self.role in _CROSS_JURISDICTION:
-            return True
-        return self.jurisdiction == jurisdiction
+        return (
+            cls in _READ_MATRIX.get(self.role, set())
+            and (cls is Classification.PUBLIC
+                 or self.role in _CROSS_JURISDICTION
+                 or self.jurisdiction == jurisdiction)
+        )
 
     @property
     def may_upload(self) -> bool:
@@ -79,24 +73,56 @@ class Principal:
         return self.role in _CAN_SEAL
 
 
+_bearer = HTTPBearer(auto_error=False)
+
+
+def _auth_error() -> HTTPException:
+    return HTTPException(
+        status_code=401,
+        detail="Authentication required.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 def current_principal(
-    x_user_id: str = Header(default="", alias="X-User-Id"),
-    x_role: str = Header(default="", alias="X-Role"),
-    x_jurisdiction: str = Header(default="", alias="X-Jurisdiction"),
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> Principal:
-    if not x_user_id or not x_role or not x_jurisdiction:
-        raise HTTPException(
-            status_code=401,
-            detail="X-User-Id, X-Role and X-Jurisdiction headers are required.",
-        )
+    """Verify an access token and derive every identity attribute from it."""
+    if not credentials or credentials.scheme.lower() != "bearer":
+        raise _auth_error()
+    if not JWT_PUBLIC_KEY:
+        raise HTTPException(503, "Authentication is not configured.")
     try:
-        role = Role(x_role.lower())
-    except ValueError:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Unknown role '{x_role}'. Known roles: {[r.value for r in Role]}",
+        claims = jwt.decode(
+            credentials.credentials,
+            JWT_PUBLIC_KEY,
+            algorithms=["RS256"],
+            issuer=JWT_ISSUER,
+            audience=JWT_AUDIENCE,
+            options={"require": ["sub", "iss", "aud", "iat", "exp", "jti", "typ"]},
         )
-    return Principal(user_id=x_user_id, role=role, jurisdiction=x_jurisdiction)
+    except jwt.PyJWTError:
+        raise _auth_error()
+    if claims.get("typ") != "access":
+        raise _auth_error()
+    user = query_one("SELECT id, active FROM users WHERE id = ?", (claims["sub"],))
+    if not user or not user["active"]:
+        raise _auth_error()
+    if query_one("SELECT 1 FROM revoked_access_tokens WHERE jti = ?", (claims["jti"],)):
+        raise _auth_error()
+    try:
+        role = Role(claims["role"])
+    except (KeyError, ValueError):
+        raise _auth_error()
+    jurisdiction = claims.get("jurisdiction")
+    if not isinstance(jurisdiction, str) or not jurisdiction:
+        raise _auth_error()
+    request.state.principal = Principal(
+        user_id=claims["sub"], role=role, jurisdiction=jurisdiction,
+        permissions=tuple(claims.get("permissions") or ()),
+    )
+    return request.state.principal
 
 
 PrincipalDep = Depends(current_principal)

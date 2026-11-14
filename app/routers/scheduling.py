@@ -112,7 +112,11 @@ def check_availability(
     principal: Principal = Depends(current_principal),
 ) -> dict:
     """Slot-by-slot availability for a judge/courtroom/day."""
-    if not query_one("SELECT 1 FROM cases WHERE id = ?", (case_id,)):
+    case = query_one("SELECT * FROM cases WHERE id = ?", (case_id,))
+    if not case:
+        raise HTTPException(404, "Unknown case id.")
+    if case["jurisdiction"] != principal.jurisdiction and \
+            principal.role.value != "registrar":
         raise HTTPException(404, "Unknown case id.")
     slots = cal.availability(
         case_id=case_id, judge_id=judge_id, courtroom_id=courtroom_id,
@@ -139,6 +143,9 @@ def schedule_hearing(
 
     case = query_one("SELECT * FROM cases WHERE id = ?", (body.get("case_id"),))
     if not case:
+        raise HTTPException(404, "Unknown case id.")
+    if case["jurisdiction"] != principal.jurisdiction and \
+            principal.role.value != "registrar":
         raise HTTPException(404, "Unknown case id.")
 
     starts_at = body.get("starts_at")
@@ -209,7 +216,13 @@ def adjourn(hearing_id: str, body: dict = Body(default={}),
     """Adjourn a hearing, freeing its slot for other matters."""
     if principal.role.value not in _MAY_SCHEDULE:
         raise HTTPException(403, "Not permitted to adjourn hearings.")
-    if not query_one("SELECT 1 FROM hearings WHERE id = ?", (hearing_id,)):
+    hearing = query_one(
+        """SELECT h.id, c.jurisdiction FROM hearings h
+           JOIN cases c ON c.id = h.case_id WHERE h.id = ?""", (hearing_id,))
+    if not hearing:
+        raise HTTPException(404, "Unknown hearing id.")
+    if hearing["jurisdiction"] != principal.jurisdiction and \
+            principal.role.value != "registrar":
         raise HTTPException(404, "Unknown hearing id.")
     with cursor() as cur:
         cur.execute("UPDATE hearings SET status = 'adjourned' WHERE id = ?",
@@ -309,7 +322,13 @@ def queue_reminders(body: dict = Body(...),
     if principal.role.value not in _MAY_SCHEDULE:
         raise HTTPException(403, "Not permitted to queue reminders.")
     hearing_id = body.get("hearing_id")
-    if not query_one("SELECT 1 FROM hearings WHERE id = ?", (hearing_id,)):
+    hearing = query_one(
+        """SELECT h.id, c.jurisdiction FROM hearings h
+           JOIN cases c ON c.id = h.case_id WHERE h.id = ?""", (hearing_id,))
+    if not hearing:
+        raise HTTPException(404, "Unknown hearing id.")
+    if hearing["jurisdiction"] != principal.jurisdiction and \
+            principal.role.value != "registrar":
         raise HTTPException(404, "Unknown hearing id.")
     return {
         "hearing_id": hearing_id,

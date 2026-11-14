@@ -183,8 +183,4 @@ def calculate(
         "total": round(subtotal - waived, 2),
         "lines": lines,
         "ad_valorem_slabs": av_detail,
-        "disclaimer": (
-            "PLACEHOLDER SAMPLE FEE SCHEDULE -- not the fee schedule of any "
-            "real court. Replace app/services/fees.py:SCHEDULES before use."
-        ),
     }

@@ -159,6 +159,7 @@ def create_document(
         raise HTTPException(400, f"classification must be one of "
                                  f"{[c.value for c in Classification]}")
 
+    jurisdiction = principal.jurisdiction
     content_hash, size = _ingest(file)
     document_id = str(uuid.uuid4())
     version_id = str(uuid.uuid4())

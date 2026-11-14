@@ -33,10 +33,8 @@ extraction is configured.
 A single static page, no build step, served by the API itself. It exists to
 make the system's behaviour visible, refusals included.
 
-Because authentication is a header stub, the page carries a **principal
-switcher** at the top: user id, role and jurisdiction go out with every
-request. Changing the role changes what comes back, which is the quickest way
-to see the access rules work. A **request log** docked at the bottom records
+The page is a legacy API console; production clients must authenticate with
+the bearer-token API described below. A **request log** docked at the bottom records
 the method, path, status and duration of every call the page makes.
 
 What each tab is for:
@@ -99,19 +97,30 @@ rm -rf data/court.db* data/blobs && ./.venv/bin/python seed.py
 Secure, searchable document store with version control, digital signatures,
 court seal stamping, and access permissions by role and jurisdiction.
 
-### Authentication is a deliberate stub
+### Authentication
 
-Every request carries three headers standing in for real auth:
+Business API routes require `Authorization: Bearer <short-lived RS256 access
+token>`. Identity, role, and jurisdiction are derived only from verified JWT
+claims; the legacy identity headers are ignored. Refresh tokens rotate in an
+`HttpOnly`, `Secure`, `SameSite=Strict` cookie and are never placed in browser
+storage.
 
+Configure `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`, `JWT_ISSUER`, `JWT_AUDIENCE`,
+and token lifetimes in `.env`. Provision an initial account without
+hard-coded credentials:
+
+```bash
+AUTH_BOOTSTRAP_USER_ID=admin AUTH_BOOTSTRAP_PASSWORD='use-a-secret-manager' \
+AUTH_BOOTSTRAP_ROLE=registrar AUTH_BOOTSTRAP_JURISDICTION=KA-BLR \
+./.venv/bin/python auth_bootstrap.py
 ```
-X-User-Id: clerk-01
-X-Role: judge | registrar | clerk | advocate | litigant | prison_officer | public
-X-Jurisdiction: KA-BLR
-```
 
-`app/security.py:current_principal` is the one function to replace with
-JWT/SSO verification. Nothing else changes when you do, because every
-policy decision works off the resulting `Principal`, not off headers.
+Authentication endpoints are `POST /api/auth/login`, `POST /api/auth/refresh`,
+`POST /api/auth/logout`, and `GET /api/auth/me`. Self-registration is disabled
+unless `AUTH_ALLOW_REGISTRATION=true` and `AUTH_REGISTRATION_JURISDICTION` is
+configured. Self-registered accounts are always created as `litigant`; users
+cannot choose a privileged role or jurisdiction. `/health` and `/ui` remain
+public; business API routes require authentication.
 
 ### Access control
 

@@ -84,6 +84,7 @@ def invoke(
             operation=operation,
             payload=body.get("payload") or {},
             caller=principal.user_id,
+            owner_user_id=principal.user_id,
             idempotency_key=idempotency_key,
             _fail_injection=bool(body.get("_fail_injection")),
         )

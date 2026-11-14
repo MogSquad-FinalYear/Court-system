@@ -2,6 +2,9 @@ fastapi
 uvicorn[standard]
 python-multipart
 python-dotenv
+PyJWT[crypto]
+werkzeug
+pytest
 # Document Management: Landing AI Agentic Document Extraction
 landingai-ade
 
