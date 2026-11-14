@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+python-dotenv
+# Document Management: Landing AI Agentic Document Extraction
+landingai-ade
+
+# Test scripts only; the application itself needs neither.
+reportlab          # builds the sample court filings the test scripts upload
+playwright         # drives a real browser against /ui in test_ui.py
