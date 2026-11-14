@@ -1,0 +1,431 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Court Case Management System</title>
+<style>
+  :root {
+    --ink: #1b1d21; --muted: #5d6470; --faint: #8b93a1;
+    --line: #dcdfe5; --bg: #f4f5f7; --card: #ffffff;
+    --navy: #1f3a5f; --navy-soft: #eaeff6;
+    --ok: #1d6b45; --ok-bg: #e7f3ec;
+    --bad: #99281e; --bad-bg: #fbeae8;
+    --warn: #8a5a09; --warn-bg: #fdf3e2;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    background: var(--navy); color: #fff; padding: 14px 20px;
+    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  header .spacer { flex: 1; }
+  header .pill {
+    background: rgba(255,255,255,.14); padding: 3px 9px; border-radius: 99px;
+    font-size: 12px; font-family: var(--mono);
+  }
+
+  /* principal switcher: auth is headers, so this is the whole login system */
+  .principal {
+    background: #16293f; color: #cfd9e6; padding: 10px 20px;
+    display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
+    border-bottom: 3px solid #0e1b2b;
+  }
+  .principal label { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; display: block; margin-bottom: 3px; color: #8ea4bf; }
+  .principal input, .principal select {
+    background: #0f1f31; color: #fff; border: 1px solid #2d4057;
+    border-radius: 5px; padding: 5px 8px; font-size: 13px; font-family: var(--mono);
+  }
+  .principal .note { font-size: 11px; color: #7f93ab; max-width: 320px; line-height: 1.35; }
+
+  nav { display: flex; gap: 2px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); overflow-x: auto; }
+  nav button {
+    background: none; border: none; border-bottom: 3px solid transparent;
+    padding: 12px 16px; font-size: 14px; color: var(--muted); cursor: pointer; white-space: nowrap;
+  }
+  nav button:hover { color: var(--ink); }
+  nav button.on { color: var(--navy); border-bottom-color: var(--navy); font-weight: 600; }
+
+  main { padding: 20px; max-width: 1340px; margin: 0 auto; }
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); align-items: start; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; }
+  .card > h2 { font-size: 14px; margin: 0 0 4px; }
+  .card > .hint { font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+  .wide { grid-column: 1 / -1; }
+
+  label.f { display: block; margin-bottom: 9px; font-size: 12px; color: var(--muted); }
+  label.f > span { display: block; margin-bottom: 3px; }
+  input, select, textarea {
+    width: 100%; padding: 6px 8px; font-size: 13px; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 5px; background: #fff; font-family: inherit;
+  }
+  textarea { font-family: var(--mono); font-size: 12px; min-height: 68px; resize: vertical; }
+  input[type=checkbox] { width: auto; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 130px; }
+  .inline { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+
+  button.a, button.b {
+    border-radius: 5px; padding: 7px 13px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  button.a { background: var(--navy); color: #fff; border: 1px solid var(--navy); }
+  button.b { background: #fff; color: var(--navy); border: 1px solid #b9c5d6; }
+  button.a:hover { background: #2a4d7c; }
+  button.b:hover { background: var(--navy-soft); }
+  button:disabled { opacity: .5; cursor: progress; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--faint); border-bottom: 1px solid var(--line); padding: 6px 8px 6px 0; font-weight: 600; }
+  td { padding: 7px 8px 7px 0; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: var(--navy-soft); }
+  .scroll { overflow-x: auto; }
+
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 11px; font-weight: 600; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); }
+  .tag.bad { background: var(--bad-bg); color: var(--bad); }
+  .tag.warn { background: var(--warn-bg); color: var(--warn); }
+  .tag.neutral { background: #eceef2; color: var(--muted); }
+  code, .mono { font-family: var(--mono); font-size: 12px; }
+
+  .out { margin-top: 12px; font-size: 13px; }
+  .out:empty { display: none; }
+  .msg { padding: 9px 11px; border-radius: 6px; margin-bottom: 8px; }
+  .msg.ok { background: var(--ok-bg); color: var(--ok); }
+  .msg.bad { background: var(--bad-bg); color: var(--bad); }
+  .msg.warn { background: var(--warn-bg); color: var(--warn); }
+  pre.json {
+    background: #121923; color: #d7e1ee; padding: 11px; border-radius: 6px;
+    font-family: var(--mono); font-size: 11.5px; overflow-x: auto; margin: 8px 0 0; max-height: 340px;
+  }
+  .kv { display: grid; grid-template-columns: 170px 1fr; gap: 3px 10px; font-size: 12.5px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+
+  .slots { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .slot { border: 1px solid var(--line); border-radius: 5px; padding: 5px 9px; font-family: var(--mono); font-size: 12px; background: #fff; cursor: pointer; }
+  .slot.free { border-color: #b4d8c3; background: var(--ok-bg); color: var(--ok); }
+  .slot.busy { background: #f6f7f9; color: var(--faint); cursor: not-allowed; text-decoration: line-through; }
+  .slot.free:hover { background: #d4eade; outline: 2px solid var(--ok); }
+
+  .party { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 8px; background: #fbfcfd; }
+  .party .x { float: right; background: none; border: none; color: var(--bad); cursor: pointer; font-size: 16px; line-height: 1; }
+  .docpick { max-height: 190px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+  .docpick .d { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 12px; }
+  .docpick .d select { width: 150px; }
+  .docpick .d .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* request log: every call this page makes, so the UI is a test instrument */
+  #logbar {
+    position: fixed; bottom: 0; left: 0; right: 0; background: #121923; color: #cfd9e6;
+    font-family: var(--mono); font-size: 11.5px; border-top: 2px solid #0a0f16; z-index: 20;
+  }
+  #logbar .head { padding: 6px 14px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
+  #logbar .head .spacer { flex: 1; }
+  #logbar .body { max-height: 190px; overflow-y: auto; padding: 0 14px 10px; display: none; }
+  #logbar.open .body { display: block; }
+  #logbar .r { display: flex; gap: 10px; padding: 2px 0; border-top: 1px solid #1e2937; }
+  #logbar .r .s { width: 34px; font-weight: 700; }
+  #logbar .r .m { width: 48px; color: #8ea4bf; }
+  #logbar .r .p { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #logbar .r .t { color: #6f8097; }
+  .s2 { color: #7bd4a0; } .s4 { color: #f2b872; } .s5 { color: #f08a7e; }
+  main { padding-bottom: 60px; }
+  .empty { color: var(--faint); font-size: 13px; padding: 8px 0; }
+</style>
+
+<header>
+  <h1>Court Case Management System</h1>
+  <span class="pill" id="h-health">checking…</span>
+  <span class="pill" id="h-ade">extraction…</span>
+  <span class="spacer"></span>
+  <span class="pill">District Court 01</span>
+</header>
+
+<div class="principal">
+  <div>
+    <label for="p-user">X-User-Id</label>
+    <input id="p-user" value="clerk-01" style="width:130px">
+  </div>
+  <div>
+    <label for="p-role">X-Role</label>
+    <select id="p-role" style="width:150px">
+      <option>clerk</option><option>judge</option><option>registrar</option>
+      <option>advocate</option><option>litigant</option>
+      <option>prison_officer</option><option>public</option>
+    </select>
+  </div>
+  <div>
+    <label for="p-jur">X-Jurisdiction</label>
+    <select id="p-jur" style="width:120px">
+      <option>KA-BLR</option><option>KA-MYS</option>
+    </select>
+  </div>
+  <div class="note">
+    Authentication is a deliberate stub: these three headers go with every
+    request. Switch role to watch permissions change.
+  </div>
+</div>
+
+<nav>
+  <button data-tab="documents" class="on">Documents</button>
+  <button data-tab="filing">Case filing</button>
+  <button data-tab="scheduling">Scheduling</button>
+  <button data-tab="integrations">Integration hub</button>
+</nav>
+
+<main>
+  <!-- ================= DOCUMENTS ================= -->
+  <section id="tab-documents">
+    <div class="grid">
+      <div class="card">
+        <h2>Upload a filing</h2>
+        <p class="hint">Stored content-addressed by SHA-256, then parsed and
+          field-extracted by Landing AI. A failed extraction still stores the file.</p>
+        <label class="f"><span>File (PDF or image)</span><input type="file" id="u-file"></label>
+        <label class="f"><span>Title</span><input id="u-title" placeholder="Quash petition - Ramesh Kumar"></label>
+        <div class="row">
+          <label class="f"><span>Case number</span><input id="u-case" placeholder="CRL.P. 4471/2025"></label>
+          <label class="f"><span>Doc type</span>
+            <select id="u-type">
+              <option>petition</option><option>judgment</option><option>affidavit</option>
+              <option>vakalatnama</option><option>order</option><option>annexure</option>
+              <option>memorandum_of_appeal</option><option>certified_copy_of_judgment</option>
+            </select></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>Classification</span>
+            <select id="u-class"><option>restricted</option><option>public</option><option>sealed</option></select></label>
+          <label class="f"><span>Jurisdiction</span><input id="u-jur" value="KA-BLR"></label>
+        </div>
+        <div class="btns"><button class="a" id="u-go">Upload and extract</button></div>
+        <div class="out" id="u-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Search</h2>
+        <p class="hint">FTS5 over the Markdown the parser produced. Results are
+          filtered by your role and jurisdiction, so a restricted document cannot
+          leak through search.</p>
+        <div class="row">
+          <input id="s-q" placeholder="quash proceedings" style="flex:2">
+          <button class="a" id="s-go" style="flex:0 0 auto">Search</button>
+        </div>
+        <div class="btns" style="margin-top:8px">
+          <button class="b" id="s-all">List all documents</button>
+        </div>
+        <div class="out" id="s-out"></div>
+      </div>
+
+      <div class="card wide">
+        <h2>Document detail</h2>
+        <p class="hint">Pick a document above. Versions are immutable; signing and
+          sealing bind an HMAC to that version's exact content hash.</p>
+        <div class="out" id="d-out"><div class="empty">No document selected.</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= FILING ================= -->
+  <section id="tab-filing" hidden>
+    <div class="grid">
+      <div class="card">
+        <h2>Case types</h2>
+        <p class="hint">What each type requires, its limitation period, and the
+          next number in the register.</p>
+        <div class="out" id="ct-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Fee calculator</h2>
+        <p class="hint"><strong>Placeholder figures.</strong> The schedule is
+          versioned by filing date, which is the part that matters; the amounts are
+          invented, not the state statute.</p>
+        <div class="row">
+          <label class="f"><span>Case type</span><select id="fe-type"></select></label>
+          <label class="f"><span>Claim value</span><input id="fe-claim" type="number" placeholder="750000"></label>
+        </div>
+        <label class="f"><span>Filing date</span><input id="fe-date" type="date"></label>
+        <div id="fe-ex" class="row" style="margin-bottom:9px"></div>
+        <div class="btns"><button class="a" id="fe-go">Calculate</button></div>
+        <div class="out" id="fe-out"></div>
+      </div>
+
+      <div class="card wide">
+        <h2>New filing</h2>
+        <p class="hint">Validate runs scrutiny without submitting and returns every
+          objection at once. Submit allocates a case number only if the filing is
+          clean, so a rejected filing leaves no gap in the register.</p>
+        <div class="row">
+          <label class="f"><span>Case type</span><select id="nf-type"></select></label>
+          <label class="f"><span>Title</span><input id="nf-title" placeholder="Ramesh Kumar v. State of Karnataka"></label>
+          <label class="f"><span>Claim value</span><input id="nf-claim" type="number" placeholder="(money suits only)"></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>Cause of action date</span><input id="nf-coa" type="date"></label>
+          <label class="f"><span>Filing date</span><input id="nf-date" type="date"></label>
+          <label class="f"><span>Jurisdiction</span><input id="nf-jur" value="KA-BLR"></label>
+        </div>
+        <div id="nf-ex" class="row" style="margin-bottom:12px"></div>
+        <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+          <div>
+            <h2 style="font-size:13px">Parties</h2>
+            <div id="nf-parties"></div>
+            <div class="btns"><button class="b" id="nf-addparty">Add party</button></div>
+          </div>
+          <div>
+            <h2 style="font-size:13px">Attach documents</h2>
+            <p class="hint">Tick a document and give it a role. Scrutiny checks the
+              roles against what this case type requires.</p>
+            <div class="docpick" id="nf-docs"><div class="empty">Loading…</div></div>
+          </div>
+        </div>
+        <div class="btns" style="margin-top:12px">
+          <button class="b" id="nf-validate">Validate only</button>
+          <button class="a" id="nf-submit">Submit filing</button>
+        </div>
+        <div class="out" id="nf-out"></div>
+      </div>
+
+      <div class="card wide">
+        <h2>Cases on the register</h2>
+        <div class="btns"><button class="b" id="cs-reload">Reload</button></div>
+        <div class="out" id="cs-out"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SCHEDULING ================= -->
+  <section id="tab-scheduling" hidden>
+    <div class="grid">
+      <div class="card">
+        <h2>Court resources</h2>
+        <p class="hint">Judges with their sitting hours, halls with video facilities, and holidays.</p>
+        <div class="btns"><button class="b" id="rs-reload">Reload</button></div>
+        <div class="out" id="rs-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Availability</h2>
+        <p class="hint">Walks the sitting day and tests every slot against all six
+          conflict checks. Click a free slot to load it into the form.</p>
+        <label class="f"><span>Case</span><select id="av-case"></select></label>
+        <div class="row">
+          <label class="f"><span>Judge</span><select id="av-judge"></select></label>
+          <label class="f"><span>Courtroom</span><select id="av-room"></select></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>Day</span><input id="av-day" type="date"></label>
+          <label class="f"><span>Minutes</span><input id="av-dur" type="number" value="30"></label>
+        </div>
+        <label class="inline"><input type="checkbox" id="av-video"> requires video link</label>
+        <div class="btns" style="margin-top:8px"><button class="a" id="av-go">Check availability</button></div>
+        <div class="out" id="av-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Schedule a hearing</h2>
+        <p class="hint">A clash returns 409 with every conflict listed, including an
+          advocate already listed in another court at that hour.</p>
+        <label class="f"><span>Case</span><select id="sh-case"></select></label>
+        <div class="row">
+          <label class="f"><span>Judge</span><select id="sh-judge"></select></label>
+          <label class="f"><span>Courtroom</span><select id="sh-room"></select></label>
+        </div>
+        <div class="row">
+          <label class="f"><span>Starts (ISO)</span><input id="sh-start" placeholder="2026-11-20T11:00:00"></label>
+          <label class="f"><span>Ends (ISO)</span><input id="sh-end" placeholder="2026-11-20T11:30:00"></label>
+        </div>
+        <label class="f"><span>Purpose</span><input id="sh-purpose" value="Admission"></label>
+        <div class="btns"><button class="a" id="sh-go">Schedule</button></div>
+        <div class="out" id="sh-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Cause list</h2>
+        <p class="hint">Part-heard matters are listed before fresh ones.</p>
+        <div class="row">
+          <label class="f"><span>Day</span><input id="cl-day" type="date"></label>
+          <button class="a" id="cl-go" style="flex:0 0 auto;height:32px;align-self:end">Render</button>
+        </div>
+        <div class="out" id="cl-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Reminders due</h2>
+        <p class="hint">Queued, never sent: no mail or SMS transport is wired, and a
+          system that claims to have notified a litigant when it did not is worse
+          than one that admits it has no transport.</p>
+        <div class="btns"><button class="b" id="rm-go">Show queue</button></div>
+        <div class="out" id="rm-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Adjourn</h2>
+        <p class="hint">Frees the slot and skips that hearing's pending reminders.</p>
+        <label class="f"><span>Hearing id</span><input id="aj-id" placeholder="paste from a scheduled hearing"></label>
+        <label class="f"><span>Reason</span><input id="aj-reason" value="Counsel on another matter"></label>
+        <div class="btns"><button class="a" id="aj-go">Adjourn</button></div>
+        <div class="out" id="aj-out"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= INTEGRATIONS ================= -->
+  <section id="tab-integrations" hidden>
+    <div class="grid">
+      <div class="card wide">
+        <h2>Connector registry</h2>
+        <p class="hint"><strong>Every adapter is a mock</strong> and every response
+          carries <code>"mock": true</code>. The framework around them is real:
+          idempotency, retry, circuit breaking, redaction and the call log.</p>
+        <div class="btns"><button class="b" id="ic-reload">Reload circuit state</button></div>
+        <div class="out" id="ic-out"></div>
+      </div>
+
+      <div class="card">
+        <h2>Invoke</h2>
+        <div class="row">
+          <label class="f"><span>Connector</span><select id="iv-conn"></select></label>
+          <label class="f"><span>Operation</span><select id="iv-op"></select></label>
+        </div>
+        <label class="f"><span>Payload (JSON)</span><textarea id="iv-payload"></textarea></label>
+        <label class="f"><span>Idempotency-Key</span>
+          <div class="row">
+            <input id="iv-idem" placeholder="(none)">
+            <button class="b" id="iv-newkey" style="flex:0 0 auto">New key</button>
+          </div></label>
+        <label class="inline"><input type="checkbox" id="iv-fail">
+          induce failure (3 in a row opens the circuit)</label>
+        <div class="btns" style="margin-top:8px">
+          <button class="a" id="iv-go">Invoke</button>
+          <button class="b" id="iv-again">Repeat with same key</button>
+        </div>
+        <div class="out" id="iv-out"></div>
+      </div>
+
+      <div class="card wide">
+        <h2>Outbound call log</h2>
+        <p class="hint">Judge or registrar only, and kept separate from the document
+          access log. Identity numbers and card data are redacted before writing.</p>
+        <div class="btns"><button class="b" id="il-go">Load log</button></div>
+        <div class="out" id="il-out"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="logbar">
+  <div class="head" id="log-head">
+    <strong>Request log</strong>
+    <span id="log-count">0 calls</span>
+    <span class="spacer"></span>
+    <span id="log-hint">click to expand</span>
+  </div>
+  <div class="body" id="log-body"></div>
+</div>
+<script src="/static/ui.js"></script>
