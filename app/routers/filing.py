@@ -200,8 +200,8 @@ def submit_filing(
             for d in documents:
                 cur.execute(
                     "INSERT INTO filing_documents "
-                    "ON CONFLICT (filing_id, document_id) DO NOTHING "
-                    "(filing_id, document_id, role) VALUES (?, ?, ?)",
+                    "(filing_id, document_id, role) VALUES (?, ?, ?) "
+                    "ON CONFLICT (filing_id, document_id) DO NOTHING",
                     (filing_id, d["document_id"], d.get("role", "")))
 
     # Confirmation to all parties. Queued through the (mock) notification
