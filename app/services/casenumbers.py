@@ -15,6 +15,7 @@ rejected filing never reaches here, so it never burns a number.
 """
 from datetime import date
 
+from app.config import DATABASE_URL
 from app.db import cursor
 
 FORMAT = "{case_type} {serial}/{year}"
@@ -28,12 +29,13 @@ def allocate(cur, *, court_id: str, case_type: str, on: date | None = None) -> s
     case write fails, the increment rolls back with it.
     """
     year = (on or date.today()).year
+    increment = "case_number_sequence.last_no + 1" if DATABASE_URL else "last_no + 1"
     cur.execute(
-        """INSERT INTO case_number_sequence (court_id, year, case_type, last_no)
-           VALUES (?, ?, ?, 1)
-           ON CONFLICT(court_id, year, case_type)
-           DO UPDATE SET last_no = last_no + 1
-           RETURNING last_no""",
+        f"""INSERT INTO case_number_sequence (court_id, year, case_type, last_no)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(court_id, year, case_type)
+            DO UPDATE SET last_no = {increment}
+            RETURNING last_no""",
         (court_id, year, case_type),
     )
     row = cur.fetchone()
