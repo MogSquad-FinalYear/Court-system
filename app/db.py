@@ -342,6 +342,14 @@ def init_db() -> None:
     with _connect() as conn:
         if DATABASE_URL:
             conn.execute(_postgres_schema())
+            for table in ("access_log", "security_events"):
+                conn.execute(
+                    f"""SELECT setval(
+                        pg_get_serial_sequence('{table}', 'id'),
+                        COALESCE((SELECT MAX(id) FROM {table}), 0) + 1,
+                        false
+                    )"""
+                )
         else:
             conn.executescript(SCHEMA)
             columns = {r["name"] for r in conn.execute(
