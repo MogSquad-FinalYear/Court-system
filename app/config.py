@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+def _env_multiline(name: str) -> str:
+    return os.environ.get(name, "").replace("\\n", "\n")
+
+
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 BLOB_DIR = DATA_DIR / "blobs"
 DB_PATH = Path(os.environ.get("DB_PATH", DATA_DIR / "court.db"))
@@ -44,8 +48,8 @@ CORS_ORIGINS = [
 if "*" in CORS_ORIGINS:
     raise RuntimeError("CORS_ORIGINS must list explicit frontend origins when credentials are enabled")
 
-JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY", "")
-JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY", "")
+JWT_PRIVATE_KEY = _env_multiline("JWT_PRIVATE_KEY")
+JWT_PUBLIC_KEY = _env_multiline("JWT_PUBLIC_KEY")
 JWT_ISSUER = os.environ.get("JWT_ISSUER", "veritas-court")
 JWT_AUDIENCE = os.environ.get("JWT_AUDIENCE", "veritas-court-api")
 JWT_ACCESS_TTL_MINUTES = int(os.environ.get("JWT_ACCESS_TTL_MINUTES", "10"))
