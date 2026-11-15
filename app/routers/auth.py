@@ -13,6 +13,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.config import (
     AUTH_ALLOW_REGISTRATION,
     AUTH_COOKIE_SECURE,
+    AUTH_COOKIE_SAMESITE,
+    CORS_ORIGINS,
     AUTH_REGISTRATION_JURISDICTION,
     AUTH_REFRESH_COOKIE,
     JWT_ACCESS_TTL_MINUTES,
@@ -129,6 +131,12 @@ def _record_attempt(client: str) -> None:
         _attempts.setdefault(client, []).append(_now())
 
 
+def _check_cookie_origin(request: Request) -> None:
+    origin = request.headers.get("origin")
+    if origin and origin not in CORS_ORIGINS:
+        raise HTTPException(403, "Origin is not allowed.")
+
+
 @router.post("/register", status_code=201)
 def register(body: RegisterIn, request: Request) -> dict:
     if not AUTH_ALLOW_REGISTRATION:
@@ -164,7 +172,8 @@ def login(body: LoginIn, request: Request, response: Response) -> dict:
     access, refresh, _ = _tokens(user)
     response.set_cookie(
         AUTH_REFRESH_COOKIE, refresh, httponly=True, secure=AUTH_COOKIE_SECURE,
-        samesite="strict", max_age=JWT_REFRESH_TTL_DAYS * 86400, path="/api/auth",
+        samesite=AUTH_COOKIE_SAMESITE, max_age=JWT_REFRESH_TTL_DAYS * 86400,
+        path="/api/auth",
     )
     _event(request, "login", "success", Principal(user["id"], Role(user["role"]),
                                                   user["jurisdiction"]))
@@ -175,6 +184,7 @@ def login(body: LoginIn, request: Request, response: Response) -> dict:
 @router.post("/refresh")
 def refresh(request: Request, response: Response,
             refresh_token: str | None = Cookie(default=None, alias=AUTH_REFRESH_COOKIE)) -> dict:
+    _check_cookie_origin(request)
     if not refresh_token:
         raise HTTPException(401, "Authentication required.")
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
@@ -198,7 +208,8 @@ def refresh(request: Request, response: Response,
     access, new_refresh, _ = _tokens(user, row["family_id"])
     response.set_cookie(
         AUTH_REFRESH_COOKIE, new_refresh, httponly=True, secure=AUTH_COOKIE_SECURE,
-        samesite="strict", max_age=JWT_REFRESH_TTL_DAYS * 86400, path="/api/auth",
+        samesite=AUTH_COOKIE_SAMESITE, max_age=JWT_REFRESH_TTL_DAYS * 86400,
+        path="/api/auth",
     )
     return {"access_token": access, "token_type": "Bearer",
             "expires_in": JWT_ACCESS_TTL_MINUTES * 60, "user": _user_view(user)}
@@ -207,6 +218,7 @@ def refresh(request: Request, response: Response,
 @router.post("/logout")
 def logout(request: Request, response: Response,
            refresh_token: str | None = Cookie(default=None, alias=AUTH_REFRESH_COOKIE)) -> dict:
+    _check_cookie_origin(request)
     if refresh_token:
         token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
         row = query_one("SELECT family_id FROM refresh_tokens WHERE token_hash = ?",

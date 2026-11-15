@@ -12,10 +12,23 @@ fall out of that for free, all of which this feature needs:
 """
 import hashlib
 import shutil
+from urllib.error import HTTPError
+from urllib.request import urlopen
 from pathlib import Path
 from typing import BinaryIO
 
-from app.config import BLOB_DIR
+from app.config import (
+    BLOB_DIR, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET, CLOUDINARY_CLOUD_NAME,
+    CLOUDINARY_URL,
+)
+
+if CLOUDINARY_URL:
+    import cloudinary
+    cloudinary.config(
+        cloud_name=CLOUDINARY_CLOUD_NAME,
+        api_key=CLOUDINARY_API_KEY,
+        api_secret=CLOUDINARY_API_SECRET,
+    )
 
 _CHUNK = 1024 * 1024
 
@@ -61,6 +74,15 @@ def store_stream(src: BinaryIO) -> tuple[str, int]:
             tmp.unlink()        # identical bytes already stored
         else:
             shutil.move(str(tmp), str(final))
+        if CLOUDINARY_URL:
+            import cloudinary.uploader
+            cloudinary.uploader.upload(
+                str(final),
+                resource_type="raw",
+                public_id=f"court/blobs/{digest}",
+                overwrite=True,
+                unique_filename=False,
+            )
         return digest, size
     finally:
         if tmp.exists():
@@ -69,5 +91,25 @@ def store_stream(src: BinaryIO) -> tuple[str, int]:
 
 def verify(content_hash: str) -> bool:
     """Re-hash a stored blob and compare. Used by the integrity endpoint."""
-    path = blob_path(content_hash)
+    path = ensure_local(content_hash)
     return path.exists() and hash_file(path) == content_hash
+
+
+def ensure_local(content_hash: str) -> Path:
+    path = blob_path(content_hash)
+    if path.exists() or not CLOUDINARY_URL:
+        return path
+    import cloudinary.utils
+    url, _ = cloudinary.utils.cloudinary_url(
+        f"court/blobs/{content_hash}", resource_type="raw", secure=True
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with urlopen(url, timeout=60) as response, path.open("wb") as target:
+            shutil.copyfileobj(response, target)
+    except HTTPError:
+        return path
+    if hash_file(path) != content_hash:
+        path.unlink()
+        raise ValueError("Downloaded blob failed integrity verification.")
+    return path

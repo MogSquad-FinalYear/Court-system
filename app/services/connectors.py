@@ -201,8 +201,9 @@ def _breaker_state(connector_id: str) -> dict:
         return row
     with cursor() as cur:
         cur.execute(
-            "INSERT OR IGNORE INTO connector_health (connector_id, last_checked) "
-            "VALUES (?, ?)", (connector_id, _now().isoformat()))
+            "INSERT INTO connector_health (connector_id, last_checked) "
+            "VALUES (?, ?) ON CONFLICT (connector_id) DO NOTHING",
+            (connector_id, _now().isoformat()))
     return {"connector_id": connector_id, "consecutive_fails": 0,
             "opened_at": None, "last_checked": _now().isoformat()}
 
@@ -310,11 +311,17 @@ def invoke(
             duration = int((time.time() - started) * 1000)
             with cursor() as cur:
                 cur.execute(
-                    """INSERT OR REPLACE INTO connector_calls
+                    """INSERT INTO connector_calls
                        (idempotency_key, connector_id, operation, request_json,
                         response_json, status, attempts, called_at, called_by,
                         duration_ms, owner_user_id)
-                       VALUES (?, ?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?)
+                       ON CONFLICT (idempotency_key) DO UPDATE SET
+                       connector_id=EXCLUDED.connector_id, operation=EXCLUDED.operation,
+                       request_json=EXCLUDED.request_json, response_json=EXCLUDED.response_json,
+                       status=EXCLUDED.status, attempts=EXCLUDED.attempts,
+                       called_at=EXCLUDED.called_at, called_by=EXCLUDED.called_by,
+                       duration_ms=EXCLUDED.duration_ms, owner_user_id=EXCLUDED.owner_user_id""",
                     (key, connector_id, operation,
                      json.dumps(_redact(connector_id, payload)),
                      json.dumps(result), attempts, _now().isoformat(), caller,
@@ -336,11 +343,17 @@ def invoke(
     duration = int((time.time() - started) * 1000)
     with cursor() as cur:
         cur.execute(
-            """INSERT OR REPLACE INTO connector_calls
+            """INSERT INTO connector_calls
                (idempotency_key, connector_id, operation, request_json,
                 response_json, status, attempts, called_at, called_by, duration_ms,
                 owner_user_id)
-               VALUES (?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, 'failed', ?, ?, ?, ?, ?)
+               ON CONFLICT (idempotency_key) DO UPDATE SET
+               connector_id=EXCLUDED.connector_id, operation=EXCLUDED.operation,
+               request_json=EXCLUDED.request_json, response_json=EXCLUDED.response_json,
+               status=EXCLUDED.status, attempts=EXCLUDED.attempts,
+               called_at=EXCLUDED.called_at, called_by=EXCLUDED.called_by,
+               duration_ms=EXCLUDED.duration_ms, owner_user_id=EXCLUDED.owner_user_id""",
             (key, connector_id, operation,
              json.dumps(_redact(connector_id, payload)),
              json.dumps({"error": str(last_error)}), attempts,

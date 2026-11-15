@@ -90,8 +90,8 @@ def add_holiday(body: dict = Body(...),
     day = _parse_day(body["day"])
     with cursor() as cur:
         cur.execute(
-            "INSERT OR REPLACE INTO court_holidays (court_id, day, reason) "
-            "VALUES (?, ?, ?)",
+            "INSERT INTO court_holidays (court_id, day, reason) "
+            "VALUES (?, ?, ?) ON CONFLICT (court_id, day) DO UPDATE SET reason = EXCLUDED.reason",
             (body.get("court_id", COURT_ID), day.isoformat(), body.get("reason")))
     return {"court_id": body.get("court_id", COURT_ID), "day": day.isoformat(),
             "reason": body.get("reason")}
@@ -305,10 +305,11 @@ def queue_reminders_for(hearing_id: str, days_before: int = 3) -> list[dict]:
         for channel, dest in targets:
             with cursor() as cur:
                 cur.execute(
-                    """INSERT OR IGNORE INTO reminders
+                    """INSERT INTO reminders
                        (id, hearing_id, party_id, channel, destination,
                         scheduled_for, status)
-                       VALUES (?, ?, ?, ?, ?, ?, 'queued')""",
+                       VALUES (?, ?, ?, ?, ?, ?, 'queued')
+                       ON CONFLICT (hearing_id, party_id, channel, scheduled_for) DO NOTHING""",
                     (str(uuid.uuid4()), hearing_id, p["id"], channel, dest, when))
             queued.append({"party": p["name"], "channel": channel,
                            "destination": dest, "scheduled_for": when,

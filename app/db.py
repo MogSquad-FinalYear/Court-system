@@ -6,12 +6,13 @@ infrastructure, and the whole store is one file you can inspect or delete.
 Swapping to Postgres later means replacing this module, not the routers --
 every query lives here.
 """
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
-from app.config import DB_PATH
+from app.config import DATABASE_URL, DB_PATH
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -301,7 +302,35 @@ CREATE TABLE IF NOT EXISTS security_events (
 """
 
 
-def _connect() -> sqlite3.Connection:
+def _postgres_schema() -> str:
+    schema = re.sub(r"^PRAGMA .*?;\n", "", SCHEMA, flags=re.MULTILINE)
+    schema = schema.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+    schema = schema.replace("REAL", "DOUBLE PRECISION")
+    schema = schema.replace(
+        """CREATE VIRTUAL TABLE IF NOT EXISTS document_fts USING fts5(
+    version_id UNINDEXED,
+    document_id UNINDEXED,
+    title,
+    markdown,
+    tokenize = 'porter unicode61'
+);""",
+        """CREATE TABLE IF NOT EXISTS document_fts (
+    version_id TEXT PRIMARY KEY,
+    document_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    markdown TEXT NOT NULL,
+    search_vector tsvector NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_document_fts_search ON document_fts USING GIN(search_vector);""",
+    )
+    return schema
+
+
+def _connect():
+    if DATABASE_URL:
+        import psycopg
+        from psycopg.rows import dict_row
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row)
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -311,19 +340,38 @@ def _connect() -> sqlite3.Connection:
 
 def init_db() -> None:
     with _connect() as conn:
-        conn.executescript(SCHEMA)
-        columns = {r["name"] for r in conn.execute(
-            "PRAGMA table_info(connector_calls)").fetchall()}
-        if "owner_user_id" not in columns:
-            conn.execute("ALTER TABLE connector_calls ADD COLUMN owner_user_id TEXT")
+        if DATABASE_URL:
+            conn.execute(_postgres_schema())
+        else:
+            conn.executescript(SCHEMA)
+            columns = {r["name"] for r in conn.execute(
+                "PRAGMA table_info(connector_calls)").fetchall()}
+            if "owner_user_id" not in columns:
+                conn.execute("ALTER TABLE connector_calls ADD COLUMN owner_user_id TEXT")
+
+
+class _CursorAdapter:
+    def __init__(self, cur):
+        self._cur = cur
+
+    def execute(self, sql: str, params: tuple[Any, ...] = ()):
+        if DATABASE_URL:
+            sql = sql.replace("?", "%s")
+        return self._cur.execute(sql, params)
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
 
 
 @contextmanager
-def cursor() -> Iterator[sqlite3.Cursor]:
+def cursor() -> Iterator:
     """Transactional cursor -- commits on clean exit, rolls back on error."""
     conn = _connect()
     try:
-        cur = conn.cursor()
+        cur = _CursorAdapter(conn.cursor())
         yield cur
         conn.commit()
     except Exception:

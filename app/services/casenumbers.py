@@ -36,7 +36,8 @@ def allocate(cur, *, court_id: str, case_type: str, on: date | None = None) -> s
            RETURNING last_no""",
         (court_id, year, case_type),
     )
-    serial = cur.fetchone()[0]
+    row = cur.fetchone()
+    serial = row["last_no"] if isinstance(row, dict) else row[0]
     return FORMAT.format(case_type=case_type, serial=serial, year=year)
 
 
@@ -50,5 +51,6 @@ def peek(court_id: str, case_type: str, on: date | None = None) -> str:
             (court_id, year, case_type),
         ).fetchone()
     return FORMAT.format(
-        case_type=case_type, serial=(row[0] if row else 0) + 1, year=year
+        case_type=case_type,         serial=((row["last_no"] if isinstance(row, dict) else row[0])
+                if row else 0) + 1, year=year
     )

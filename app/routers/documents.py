@@ -123,7 +123,7 @@ def _ingest(upload: UploadFile) -> tuple[str, int]:
 
 def _run_extraction(version_id: str, document_id: str, title: str,
                     content_hash: str) -> extraction.ExtractionOutcome:
-    outcome = extraction.extract_document(storage.blob_path(content_hash))
+    outcome = extraction.extract_document(storage.ensure_local(content_hash))
     with cursor() as cur:
         cur.execute(
             """UPDATE document_versions
@@ -320,7 +320,7 @@ def download(
     )
     if not row:
         raise HTTPException(404, "Unknown version.")
-    path = storage.blob_path(row["content_hash"])
+    path = storage.ensure_local(row["content_hash"])
     if not path.exists():
         raise HTTPException(410, "Stored content is missing from the blob store.")
     return FileResponse(
@@ -469,7 +469,7 @@ def integrity(
         report.append({
             "version_no": v["version_no"],
             "content_hash": v["content_hash"],
-            "blob_present": storage.blob_path(v["content_hash"]).exists(),
+            "blob_present": storage.ensure_local(v["content_hash"]).exists(),
             "bytes_match_hash": bytes_ok,
             "attestations": [
                 {"kind": a["kind"], "actor_id": a["actor_id"],

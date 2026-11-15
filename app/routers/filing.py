@@ -199,7 +199,8 @@ def submit_filing(
         if accepted:
             for d in documents:
                 cur.execute(
-                    "INSERT OR IGNORE INTO filing_documents "
+                    "INSERT INTO filing_documents "
+                    "ON CONFLICT (filing_id, document_id) DO NOTHING "
                     "(filing_id, document_id, role) VALUES (?, ?, ?)",
                     (filing_id, d["document_id"], d.get("role", "")))
 

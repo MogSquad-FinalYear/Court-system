@@ -1,6 +1,7 @@
 """Runtime configuration, read once from the environment (.env supported)."""
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -10,6 +11,25 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR / "data"))
 BLOB_DIR = DATA_DIR / "blobs"
 DB_PATH = Path(os.environ.get("DB_PATH", DATA_DIR / "court.db"))
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+CLOUDINARY_URL = os.environ.get("CLOUDINARY_URL", "")
+_cloudinary_parts = urlsplit(CLOUDINARY_URL) if CLOUDINARY_URL else None
+CLOUDINARY_CLOUD_NAME = (
+    _cloudinary_parts.hostname if _cloudinary_parts else
+    os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+)
+CLOUDINARY_API_KEY = (
+    _cloudinary_parts.username if _cloudinary_parts else
+    os.environ.get("CLOUDINARY_API_KEY", "")
+)
+CLOUDINARY_API_SECRET = (
+    _cloudinary_parts.password if _cloudinary_parts else
+    os.environ.get("CLOUDINARY_API_SECRET", "")
+)
+if CLOUDINARY_URL and not all(
+    (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)
+):
+    raise RuntimeError("CLOUDINARY_URL must contain a cloud name, API key, and API secret")
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 BLOB_DIR.mkdir(parents=True, exist_ok=True)
@@ -34,6 +54,11 @@ AUTH_ALLOW_REGISTRATION = os.environ.get("AUTH_ALLOW_REGISTRATION", "false").low
 AUTH_REGISTRATION_JURISDICTION = os.environ.get("AUTH_REGISTRATION_JURISDICTION", "")
 AUTH_REFRESH_COOKIE = os.environ.get("AUTH_REFRESH_COOKIE", "veritas_refresh")
 AUTH_COOKIE_SECURE = os.environ.get("AUTH_COOKIE_SECURE", "true").lower() == "true"
+AUTH_COOKIE_SAMESITE = os.environ.get("AUTH_COOKIE_SAMESITE", "strict").lower()
+if AUTH_COOKIE_SAMESITE not in {"strict", "lax", "none"}:
+    raise RuntimeError("AUTH_COOKIE_SAMESITE must be strict, lax, or none")
+if AUTH_COOKIE_SAMESITE == "none" and not AUTH_COOKIE_SECURE:
+    raise RuntimeError("AUTH_COOKIE_SECURE must be true when AUTH_COOKIE_SAMESITE is none")
 
 # --- Document Management -------------------------------------------------
 # Landing AI Agentic Document Extraction. The SDK reads this same variable

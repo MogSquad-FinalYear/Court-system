@@ -23,7 +23,9 @@ def client(tmp_path, monkeypatch):
     import app.security as security
     import app.routers.auth as auth
     config.DB_PATH = tmp_path / "test.db"
+    config.DATABASE_URL = ""
     db.DB_PATH = config.DB_PATH
+    db.DATABASE_URL = ""
     config.JWT_PRIVATE_KEY = private_pem
     config.JWT_PUBLIC_KEY = public_pem
     config.AUTH_COOKIE_SECURE = False
@@ -168,3 +170,12 @@ def test_change_password_revokes_refresh_sessions(client):
         "/api/auth/login",
         json={"user_id": "judge-1", "password": "a-new-password-123"},
     ).status_code == 200
+
+
+def test_refresh_rejects_untrusted_origin(client):
+    login(client)
+    response = client.post(
+        "/api/auth/refresh",
+        headers={"Origin": "https://untrusted.example"},
+    )
+    assert response.status_code == 403
